@@ -1,72 +1,83 @@
-
-# Функція для створення таблиці
 def init_tables(conn):
-    try:
-        # Підключення до бази даних
-        cursor = conn.cursor()
+    cursor = conn.cursor()
 
-        # Запит для створення таблиці news_data
-        create_news_data_table_query = '''
-        CREATE TABLE IF NOT EXISTS news_data (
-            id SERIAL PRIMARY KEY,
-            company_id VARCHAR(4) NOT NULL,
-            news_text TEXT,
-            time TIMESTAMPTZ ,
-            url TEXT ,
-            summary TEXT,
-            provider TEXT 
-        );
-        '''
-        cursor.execute(create_news_data_table_query)
-
-        # Запит для створення таблиці prices
-        create_prices_table_query = '''
-        CREATE TABLE IF NOT EXISTS prices (
-            id SERIAL PRIMARY KEY,
-            company_id TEXT NOT NULL,
-            price DECIMAL NOT NULL,
-            time TIMESTAMPTZ NOT NULL
-        );
-        '''
-        cursor.execute(create_prices_table_query)
-
-        # Запит для створення таблиці campaigns
-        create_campaigns_table_query = '''
-        CREATE TABLE IF NOT EXISTS campaigns (
-            id SERIAL PRIMARY KEY,
-            created_by TEXT NOT NULL,
-            company_id TEXT NOT NULL,
-            date_created TIMESTAMPTZ NOT NULL
-        );
-        '''
-        cursor.execute(create_campaigns_table_query)
-
-        # Запит для створення таблиці analytics
-        create_analytics_table_query = '''
-        CREATE TABLE IF NOT EXISTS analytics (
-            id SERIAL PRIMARY KEY,
-            company_id TEXT NOT NULL,
-            value TEXT NOT NULL
-        );
-        '''
-        cursor.execute(create_analytics_table_query)
-
-        create_users_query = '''
+    print("[DB]  Creating 'users' table...")
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
-            username VARCHAR(50) UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            email TEXT UNIQUE
         );
-        '''
-        cursor.execute(create_users_query)
+    """)
 
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return "Tables created or already exist."
-    except Exception as e:
-        return f"Error creating tables: {str(e)}"
-    
+    print("[DB]  Creating 'campaigns' table...")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS campaigns (
+            id SERIAL PRIMARY KEY,
+            created_by TEXT NOT NULL REFERENCES users(username),
+            company_id VARCHAR(10) NOT NULL,
+            date_created TIMESTAMPTZ DEFAULT NOW(),
+            is_active BOOLEAN DEFAULT TRUE
+        );
+    """)
 
+    print("[DB]  Creating 'prices' table...")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS prices (
+            id SERIAL PRIMARY KEY,
+            company_id VARCHAR(10) NOT NULL,
+            price FLOAT,
+            time TIMESTAMPTZ,
+            previous_close FLOAT,
+            open_price FLOAT,
+            day_low FLOAT,
+            day_high FLOAT,
+            change_percent FLOAT,
+            volume BIGINT,
+            trend TEXT,
+            is_trend_change BOOLEAN,
+            news_related BOOLEAN
+        );
+    """)
 
+    print("[DB]  Creating 'news_data' table...")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS news_data (
+            id TEXT PRIMARY KEY,
+            company_id VARCHAR(10) NOT NULL,
+            news_text TEXT,
+            time TIMESTAMPTZ,
+            url TEXT,
+            summary TEXT,
+            provider TEXT
+        );
+    """)
 
+    print("[DB]  Creating 'alerts' table...")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS alerts (
+            id SERIAL PRIMARY KEY,
+            campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE RESTRICT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            alert_type TEXT DEFAULT 'trend_change',
+            alert_condition TEXT DEFAULT 'all',
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+    """)
+
+    print("[DB]  Creating 'notifications' table...")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS notifications (
+            id SERIAL PRIMARY KEY,
+            price_id INTEGER NOT NULL REFERENCES prices(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            sent_at TIMESTAMPTZ DEFAULT NOW()
+        );
+    """)
+
+    conn.commit()
+    cursor.close()
+
+    return "[DB]  Tables initialized"

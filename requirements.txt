@@ -2,3 +2,5 @@ Flask
 psycopg2
 Werkzeug
 flask-httpauth
+yfinance
+dotenv
