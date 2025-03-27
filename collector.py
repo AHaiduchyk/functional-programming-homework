@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 import logging
 from dateutil import parser
 import pytz
+from datetime import time
+import requests
 
 # --- Logging config ---
 logging.basicConfig(
@@ -25,15 +27,23 @@ def get_db_connection():
     return psycopg2.connect(DATABASE_URL)
 
 
-def parse_pub_date(pub_date_str: str) -> datetime:
+def parse_pub_date(pub_date_str: str) -> str:
     """
-    Parses a date string into a naive UTC datetime.
+    Parses an ISO 8601 UTC date string and returns a local timezone-aware datetime as string.
     """
     try:
         dt = parser.isoparse(pub_date_str)
-        return dt.astimezone(pytz.UTC).replace(tzinfo=None)
+        
+        if dt.tzinfo is None:
+            dt = pytz.UTC.localize(dt)
+        else:
+            dt = dt.astimezone(pytz.UTC)
+
+        local_dt = dt.astimezone()  # Convert to local timezone
+        return local_dt.isoformat()
+
     except Exception:
-        return datetime.utcnow()
+        return datetime.now().astimezone().isoformat()
 
 
 def fetch_campaigns():
@@ -55,16 +65,21 @@ def fetch_campaigns():
         return []
 
 
+
 def fetch_stock_price(company):
     """
     Fetches stock price info for a given company from Yahoo Finance.
     """
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    })
     try:
-        stock = yf.Ticker(company["ticker"])
+        stock = yf.Ticker(company["ticker"], session=session)
         info = stock.info
         return {
             "company_id": company["ticker"],
-            "price": float(info.get("currentPrice")),
+            "price": float(info.get("currentPrice")), #погратись із цим, на вихідних ринки не працюють
             "time": datetime.utcnow(),
             "previous_close": info.get("previousClose"),
             "open_price": info.get("open"),
@@ -176,7 +191,7 @@ def fetch_news(company):
                 "company_id": company["ticker"],
                 "news_text": content.get("title", "No title"),
                 "time": parse_pub_date(content.get("pubDate", "")),
-                "url": content.get("clickThroughUrl", {}).get("url", ""),
+                "url": content.get("canonicalUrl", {}).get("url", ""),
                 "summary": content.get("summary", ""),
                 "provider": content.get("provider", {}).get("displayName", "Unknown")
             })
@@ -236,11 +251,11 @@ def main():
         logger.info(f"Price for {company['ticker']}: {price}")
         if price:
             store_price(price)
-
         news_list = fetch_news(company)
         logger.info(f"Found {len(news_list)} news items for {company['ticker']}")
         if news_list:
             store_news(news_list)
+        
 
 
 if __name__ == "__main__":

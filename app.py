@@ -10,6 +10,8 @@ import threading
 import time
 import re
 import notificator
+from datetime import datetime
+import pytz
 
 app = Flask(__name__)
 
@@ -98,21 +100,43 @@ def create_tables():
         print(f"Table initialization failed: {str(e)}")
 
 
-# Run collector and notificator every 30 minutes in background
+# Run collector and notificator every 10 minutes in background
+def is_market_open():
+    # Задаємо часову зону ринку — Нью-Йорк
+    eastern = pytz.timezone('US/Eastern')
+    now = datetime.now(eastern)
+    
+    # Перевірка чи це будній день (0=Пн, 6=Нд)
+    if now.weekday() >= 5:
+        return False
+    
+    # Перевірка чи в межах робочих годин (9:30 – 16:00)
+    market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
+    market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
+
+    return market_open <= now <= market_close
+
 def start_background_loop():
+    print("[BG] Starting background loop")
+    if getattr(start_background_loop, "_started", False):
+        return  # prevent multiple threads
+    start_background_loop._started = True
+
     def run_collect_and_notify():
         while True:
-            try:
-                print("[BG] ▶️ Running collector...")
-                collector.main()
-                print("[BG] ✅ Collector done")
-
-                print("[BG] ▶️ Sending notifications...")
-                notificator.check_and_notify()
-                print("[BG] ✅ Notifications sent")
-            except Exception as e:
-                print(f"[BG] ❌ Error: {e}")
-            time.sleep(1800)
+            if is_market_open():
+                try:
+                    print("[BG] ▶️ Market is OPEN. Running collector...")
+                    collector.main()
+                    print("[BG] ✅ Collector done")
+                    print("[BG] ▶️ Sending notifications...")
+                    notificator.check_and_notify()
+                    print("[BG] ✅ Notifications sent")
+                except Exception as e:
+                    print(f"[BG] ❌ Error: {e}")
+            else:
+                print("[BG] ⏸️ Market is CLOSED. Skipping this run.")
+            time.sleep(1800)  # чекати 30 хвилин
 
     thread = threading.Thread(target=run_collect_and_notify, daemon=True)
     thread.start()
@@ -546,6 +570,10 @@ def mock_test_data():
 
 # Start the server
 if __name__ == "__main__":
-    create_tables()
-    start_background_loop()
-    app.run(debug=True, host="0.0.0.0", port=5001)
+    print("Starting")
+    with app.app_context():
+        create_tables()
+        print("Tables created")
+        start_background_loop()
+        
+    app.run(debug=False, host="0.0.0.0", port=5001)

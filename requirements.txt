@@ -1,6 +1,8 @@
-Flask
-psycopg2
-Werkzeug
-flask-httpauth
-yfinance
-dotenv
+Flask==2.3.3
+Werkzeug==2.3.7
+flask-httpauth==4.8.0
+psycopg2-binary==2.9.9
+yfinance==0.2.55
+python-dotenv==1.0.1
+pytz==2024.1
+python-dateutil==2.8.2

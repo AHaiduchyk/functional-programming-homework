@@ -42,40 +42,38 @@ def render_email_template(company_id, trend, change_percent, time, news_items):
 
     return f"""
     <html>
-    <body style="margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background-color: #f4f4f4;">
-      <div style="
-        max-width: 600px;
-        margin: 40px auto;
-        border-radius: 12px;
-        overflow: hidden;
-        box-shadow: 0 0 10px rgba(0,0,0,0.15);
-        background-image: 
-          linear-gradient(rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.95)),
-          url('https://i.ibb.co/BVGZSC38/trading-bg.webp');
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-      ">
-        <div style="padding: 30px;">
-          <h2 style="color: {trend_color};">📈 Alert: {company_id}</h2>
-          <p><strong>Trend:</strong> {trend.title()}</p>
-          <p><strong>Change:</strong> {change_percent:.2f}%</p>
-          <p><strong>Time:</strong> {time}</p>
-          {news_html}
-        </div>
-        <div style="
-          background-color: #333;
-          color: white;
-          text-align: center;
-          font-size: 0.7em;
-          padding: 8px 12px;
-          border-top: 1px solid #222;
-        ">
-          You are receiving this alert because you're tracking <strong>{company_id}</strong>. Stay sharp. Stay informed. ⚡
-        </div>
+  <body style="margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background-color: #e6ecf0;">
+    <div style="
+      max-width: 600px;
+      margin: 40px auto;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 0 10px rgba(0,0,0,0.15);
+      background-color: white;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    ">
+      <div style="padding: 30px;">
+        <h2 style="color: {trend_color};">📈 Alert: {company_id}</h2>
+        <p><strong>Trend:</strong> {trend.title()}</p>
+        <p><strong>Change:</strong> {change_percent:.2f}%</p>
+        <p><strong>Time:</strong> {time}</p>
+        {news_html}
       </div>
-    </body>
-    </html>
+      <div style="
+        background-color: #333;
+        color: white;
+        text-align: center;
+        font-size: 0.7em;
+        padding: 8px 12px;
+        border-top: 1px solid #222;
+      ">
+        You are receiving this alert because you're tracking <strong>{company_id}</strong>. Stay sharp. Stay informed. ⚡
+      </div>
+    </div>
+  </body>
+</html>
     """
 
 
@@ -120,6 +118,7 @@ def check_and_notify():
             a.alert_condition = 'all'
             OR (a.alert_condition = 'up' AND p.trend = 'up')
             OR (a.alert_condition = 'down' AND p.trend = 'down')
+        and p.news_related = True
 )
         """)
 
@@ -133,13 +132,19 @@ def check_and_notify():
 
             news_rows = []
             if news_related:
-                cursor.execute("""
+                query = """
                     SELECT url, news_text
                     FROM news_data
                     WHERE company_id = %s AND time BETWEEN %s AND %s
                     ORDER BY time DESC
-                """, (company_id, time - timedelta(minutes=15), time + timedelta(minutes=15)))
+                """
+
+                time_from = (time - timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
+                time_to = (time + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
+
+                cursor.execute(query, (company_id, time_from, time_to))
                 news_rows = cursor.fetchall()
+
 
             html_body = render_email_template(
                 company_id=company_id,
@@ -148,7 +153,7 @@ def check_and_notify():
                 time=time.strftime("%Y-%m-%d %H:%M"),
                 news_items=[{"news_text": t, "url": u} for u, t in news_rows] if news_rows else []
             )
-
+            print(html_body)
             send_email(email, f"📈 Stock Alert: {company_id} → {trend.upper()}", html_body)
 
             cursor.execute("""
